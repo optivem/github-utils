@@ -140,7 +140,7 @@ delete_packages_for_repo() {
         # https://github.com/orgs/{owner}/packages/{type}/{package}/settings
         if [[ "$visibility" == "public" ]]; then
           echo "    ⚠️  SKIPPED: Package is public. Make it private first via GitHub UI:"
-          echo "       https://github.com/orgs/${owner}/packages/${pkg_type}/package/${encoded_name}/settings"
+          echo "       https://github.com/orgs/${owner}/packages/${pkg_type}/${encoded_name}/settings"
           ((total_skipped++)) || true
         elif [[ "$DRY_RUN" == "1" ]]; then
           echo "    [DRY RUN] Would delete package: $package_name"
