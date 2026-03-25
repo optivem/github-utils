@@ -33,17 +33,19 @@ The `owner` can be a GitHub organization or a personal user account.
 
 ### delete-packages.sh
 
-Bulk deletes GitHub packages from one or more orgs/users. Handles the GitHub requirement of making public packages private before deletion. Automatically detects whether the owner is an org or user account.
+Bulk deletes GitHub packages from one or more repositories. Handles the GitHub requirement of making public packages private before deletion.
 
 **Usage:**
 
 ```bash
-# Delete all packages for an org
-./scripts/delete-packages.sh optivem
+# Delete all packages from specific repos
+./scripts/delete-packages.sh owner/repo1 owner/repo2
+
+# Single repo
+./scripts/delete-packages.sh optivem/eshop
 
 # Preview what would be deleted (no changes made)
-DRY_RUN=1 ./scripts/delete-packages.sh optivem
-
-# Multiple owners
-./scripts/delete-packages.sh optivem my-github-username
+DRY_RUN=1 ./scripts/delete-packages.sh optivem/eshop
 ```
+
+The `owner` can be a GitHub organization or a personal user account.

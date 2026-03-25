@@ -1,15 +1,18 @@
 #!/bin/bash
 # delete-packages.sh
-# Deletes all GitHub packages from specified orgs/users.
-# Public packages must be made private before deletion (GitHub requirement).
-# Steps per package: list versions -> make private -> delete all versions -> delete package.
+# Deletes all private GitHub packages linked to specified repos.
+# Public packages are skipped — they must be made private first via the GitHub UI.
+# Steps per package: delete all versions -> delete package.
+#
+# Note: GitHub's API lists packages at the org/user level, not per-repo.
+# This script lists all packages by type and filters by repository name.
+# The package_type parameter is required by the API.
 #
 # Usage:
-#   ./scripts/delete-packages.sh owner1 owner2          # delete all packages for owners
-#   ./scripts/delete-packages.sh optivem                # single org
-#   DRY_RUN=1 ./scripts/delete-packages.sh optivem      # preview what would be deleted
+#   ./scripts/delete-packages.sh owner/repo1 owner/repo2   # delete packages from specific repos
+#   ./scripts/delete-packages.sh optivem/eshop       # single repo
+#   DRY_RUN=1 ./scripts/delete-packages.sh owner/repo       # preview what would be deleted
 #
-# Supported package types: npm, maven, docker, nuget, rubygems, container
 # Reference: https://docs.github.com/en/rest/packages/packages
 
 set -euo pipefail
@@ -21,17 +24,18 @@ source "$SCRIPT_DIR/common.sh"
 # 1 PATCH (make private) + N DELETEs (versions) + 1 DELETE (package)
 # DELAY_BETWEEN_DELETES=2 keeps us well under the 80 mutating calls/min secondary limit
 
+PACKAGE_TYPES=("npm" "maven" "docker" "nuget" "rubygems" "container")
+
 if [[ $# -eq 0 ]]; then
-  echo "Usage: $0 <owner> [owner ...]"
-  echo "  Example: $0 optivem"
-  echo "  Example: $0 optivem my-github-username"
+  echo "Usage: $0 <owner/repo> [owner/repo ...]"
+  echo "  Example: $0 optivem/eshop optivem/eshop-tests"
   echo ""
   echo "Environment variables:"
   echo "  DRY_RUN=1   Preview what would be deleted without making changes"
   exit 1
 fi
 
-OWNERS=("$@")
+REPOS=("$@")
 
 # Detect whether the owner is an org or a user.
 # Returns "orgs" or "users".
@@ -47,18 +51,25 @@ get_owner_type() {
   fi
 }
 
+# URL-encode package names (e.g. "greeter-java/monolith" -> "greeter-java%2Fmonolith")
+url_encode_package() {
+  echo "$1" | sed 's/\//%2F/g'
+}
+
 delete_package_versions() {
   local owner_type="$1"
   local owner="$2"
   local package_type="$3"
   local package_name="$4"
+  local encoded_name
+  encoded_name=$(url_encode_package "$package_name")
 
   local page=1
 
   while true; do
     wait_for_rate_limit
 
-    gh_api_or_stop "${owner_type}/${owner}/packages/${package_type}/${package_name}/versions?per_page=${PAGE_SIZE}&page=${page}" \
+    gh_api_or_stop "${owner_type}/${owner}/packages/${package_type}/${encoded_name}/versions?per_page=${PAGE_SIZE}&page=${page}" \
       --jq '.[] | "\(.id)\t\(.name)"'
     local versions="$GH_API_OUTPUT"
 
@@ -72,7 +83,7 @@ delete_package_versions() {
       else
         echo "      Deleting version: $version_name..."
         wait_for_rate_limit
-        gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${package_type}/${package_name}/versions/${version_id}"
+        gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${package_type}/${encoded_name}/versions/${version_id}"
         echo "        ✓ Version deleted"
         sleep "$DELAY_BETWEEN_DELETES"
       fi
@@ -82,93 +93,100 @@ delete_package_versions() {
   done
 }
 
-delete_packages_for_owner() {
-  local owner="$1"
+delete_packages_for_repo() {
+  local full_repo="$1"
+  local owner="${full_repo%%/*}"
+  local repo_name="${full_repo#*/}"
 
   echo ""
   echo "========================================="
-  echo "  Processing: $owner"
+  echo "  Processing: $full_repo"
   echo "========================================="
 
   wait_for_rate_limit
   local owner_type
   owner_type=$(get_owner_type "$owner")
-  echo "  Detected owner type: $owner_type"
 
   local total_deleted=0
-  local page=1
+  local total_skipped=0
 
-  while true; do
-    wait_for_rate_limit
+  # GitHub API requires package_type when listing packages, so we loop through all types
+  for package_type in "${PACKAGE_TYPES[@]}"; do
+    local page=1
 
-    gh_api_or_stop "${owner_type}/${owner}/packages?per_page=${PAGE_SIZE}&page=${page}" \
-      --jq '.[] | "\(.name)\t\(.package_type)\t\(.visibility)"'
-    local packages="$GH_API_OUTPUT"
+    while true; do
+      wait_for_rate_limit
 
-    if [[ -z "$packages" ]]; then
-      if [[ "$page" -eq 1 ]]; then
-        echo "  No packages found."
+      # List packages of this type, filter by repository name
+      local packages
+      packages=$(gh api "${owner_type}/${owner}/packages?package_type=${package_type}&per_page=${PAGE_SIZE}&page=${page}" \
+        --jq ".[] | select(.repository.name == \"${repo_name}\") | \"\(.name)\t\(.package_type)\t\(.visibility)\"" 2>&1) || {
+        # No packages of this type — skip
+        break
+      }
+
+      if [[ -z "$packages" ]]; then
+        break
       fi
-      break
-    fi
 
-    while IFS=$'\t' read -r package_name package_type visibility; do
-      echo ""
-      echo "    Package: $package_name (type: $package_type, visibility: $visibility)"
+      while IFS=$'\t' read -r package_name pkg_type visibility; do
+        local encoded_name
+        encoded_name=$(url_encode_package "$package_name")
+        echo ""
+        echo "    Package: $package_name (type: $pkg_type, visibility: $visibility)"
 
-      if [[ "$DRY_RUN" == "1" ]]; then
-        echo "    [DRY RUN] Would delete package: $package_name"
-        # Still list versions in dry run for visibility
-        delete_package_versions "$owner_type" "$owner" "$package_type" "$package_name"
-      else
-        # Step 1: Make private if public (required before deletion)
+        # Public packages with many downloads can't be deleted via API.
+        # They must be made private first via the GitHub UI:
+        # https://github.com/orgs/{owner}/packages/{type}/{package}/settings
         if [[ "$visibility" == "public" ]]; then
-          echo "    Making private..."
+          echo "    ⚠️  SKIPPED: Package is public. Make it private first via GitHub UI:"
+          echo "       https://github.com/orgs/${owner}/packages/${pkg_type}/package/${encoded_name}/settings"
+          ((total_skipped++)) || true
+        elif [[ "$DRY_RUN" == "1" ]]; then
+          echo "    [DRY RUN] Would delete package: $package_name"
+          delete_package_versions "$owner_type" "$owner" "$pkg_type" "$package_name"
+        else
+          # Step 1: Delete all versions
+          echo "    Deleting versions..."
+          delete_package_versions "$owner_type" "$owner" "$pkg_type" "$package_name"
+
+          # Step 2: Delete the package itself
+          echo "    Deleting package..."
           wait_for_rate_limit
-          gh_api_or_stop -X PATCH "${owner_type}/${owner}/packages/${package_type}/${package_name}" \
-            -f visibility=private
-          echo "      ✓ Made private"
+          gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${pkg_type}/${encoded_name}"
+          echo "      ✓ Package deleted"
+
+          ((total_deleted++)) || true
           sleep "$DELAY_BETWEEN_DELETES"
         fi
+      done <<< "$packages"
 
-        # Step 2: Delete all versions
-        echo "    Deleting versions..."
-        delete_package_versions "$owner_type" "$owner" "$package_type" "$package_name"
-
-        # Step 3: Delete the package itself
-        echo "    Deleting package..."
-        wait_for_rate_limit
-        gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${package_type}/${package_name}"
-        echo "      ✓ Package deleted"
-
-        ((total_deleted++))
-        sleep "$DELAY_BETWEEN_DELETES"
-      fi
-    done <<< "$packages"
-
-    ((page++))
+      ((page++))
+    done
   done
 
-  if [[ "$total_deleted" -eq 0 && "$DRY_RUN" != "1" ]]; then
-    echo "  No packages found."
-  elif [[ "$DRY_RUN" != "1" ]]; then
-    echo "  Done. Deleted $total_deleted packages from $owner."
+  if [[ "$DRY_RUN" != "1" ]]; then
+    if [[ "$total_deleted" -eq 0 && "$total_skipped" -eq 0 ]]; then
+      echo "  No packages found."
+    else
+      echo "  Done. Deleted $total_deleted, skipped $total_skipped (public) packages from $full_repo."
+    fi
   fi
 }
 
 echo "============================================"
 echo "  GitHub Package Cleanup Script"
-echo "  Owners: ${OWNERS[*]}"
+echo "  Repos: ${REPOS[*]}"
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "  Mode: DRY RUN (no changes will be made)"
 fi
 echo "============================================"
 
-for owner in "${OWNERS[@]}"; do
-  delete_packages_for_owner "$owner"
+for repo in "${REPOS[@]}"; do
+  delete_packages_for_repo "$repo"
 
-  # Pause between owners to spread out API usage
-  if [[ "$owner" != "${OWNERS[-1]}" ]]; then
+  # Pause between repos to spread out API usage
+  if [[ "$repo" != "${REPOS[-1]}" ]]; then
     sleep "$DELAY_BETWEEN_REPOS"
   fi
 done
