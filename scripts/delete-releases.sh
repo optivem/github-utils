@@ -69,7 +69,7 @@ delete_releases_for_repo() {
         gh_api_or_stop -X DELETE "repos/${full_repo}/git/refs/tags/${tag_name}"
         echo "    ✓ Tag deleted"
 
-        ((total_deleted++))
+        ((total_deleted++)) || true
         sleep "$DELAY_BETWEEN_DELETES"
       fi
     done <<< "$releases"
