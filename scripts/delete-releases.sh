@@ -11,7 +11,8 @@
 set -euo pipefail
 
 # Rate limit settings based on GitHub API limits:
-# - REST API: 5,000 requests/hour for authenticated users
+# - Personal access token: 5,000 requests/hour
+# - GITHUB_TOKEN in Actions: 1,000 requests/hour/repo (15,000 for Enterprise Cloud)
 # - Secondary limits: max 80 content-modifying requests/minute (POST/PATCH/PUT/DELETE)
 # - Each release deletion = 2 mutating calls (delete release + delete tag)
 # - DELAY_BETWEEN_DELETES=2 gives ~30 deletions/min = 60 mutating calls/min (under 80 limit)
