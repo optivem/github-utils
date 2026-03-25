@@ -2,7 +2,7 @@
 # delete-packages.sh
 # Deletes all private GitHub packages linked to specified repos.
 # Public packages are skipped — they must be made private first via the GitHub UI.
-# Steps per package: delete all versions -> delete package.
+# Private packages are deleted in one call (no need to delete versions individually).
 #
 # Note: GitHub's API lists packages at the org/user level, not per-repo.
 # This script lists all packages by type and filters by repository name.
@@ -56,43 +56,6 @@ url_encode_package() {
   echo "$1" | sed 's/\//%2F/g'
 }
 
-delete_package_versions() {
-  local owner_type="$1"
-  local owner="$2"
-  local package_type="$3"
-  local package_name="$4"
-  local encoded_name
-  encoded_name=$(url_encode_package "$package_name")
-
-  local page=1
-
-  while true; do
-    wait_for_rate_limit
-
-    gh_api_or_stop "${owner_type}/${owner}/packages/${package_type}/${encoded_name}/versions?per_page=${PAGE_SIZE}&page=${page}" \
-      --jq '.[] | "\(.id)\t\(.name)"'
-    local versions="$GH_API_OUTPUT"
-
-    if [[ -z "$versions" ]]; then
-      break
-    fi
-
-    while IFS=$'\t' read -r version_id version_name; do
-      if [[ "$DRY_RUN" == "1" ]]; then
-        echo "      [DRY RUN] Would delete version: $version_name (id: $version_id)"
-      else
-        echo "      Deleting version: $version_name..."
-        wait_for_rate_limit
-        gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${package_type}/${encoded_name}/versions/${version_id}"
-        echo "        ✓ Version deleted"
-        sleep "$DELAY_BETWEEN_DELETES"
-      fi
-    done <<< "$versions"
-
-    ((page++))
-  done
-}
-
 delete_packages_for_repo() {
   local full_repo="$1"
   local owner="${full_repo%%/*}"
@@ -144,13 +107,11 @@ delete_packages_for_repo() {
           ((total_skipped++)) || true
         elif [[ "$DRY_RUN" == "1" ]]; then
           echo "    [DRY RUN] Would delete package: $package_name"
-          delete_package_versions "$owner_type" "$owner" "$pkg_type" "$package_name"
         else
-          # Step 1: Delete all versions
-          echo "    Deleting versions..."
-          delete_package_versions "$owner_type" "$owner" "$pkg_type" "$package_name"
-
-          # Step 2: Delete the package itself
+          # Delete the entire package (including all versions) in one call.
+          # Deleting individual versions first can fail for versions that were
+          # previously public with >5000 downloads, but deleting the whole
+          # package works.
           echo "    Deleting package..."
           wait_for_rate_limit
           gh_api_or_stop -X DELETE "${owner_type}/${owner}/packages/${pkg_type}/${encoded_name}"
