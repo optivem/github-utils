@@ -4,38 +4,35 @@
 # with built-in rate limit handling to avoid hitting GitHub API limits.
 #
 # Usage:
-#   ./scripts/delete-releases.sh                  # delete all releases from all greeter repos
-#   ./scripts/delete-releases.sh greeter-java     # delete releases from a single repo
-#   DRY_RUN=1 ./scripts/delete-releases.sh        # preview what would be deleted
+#   ./scripts/delete-releases.sh org/repo1 org/repo2   # delete releases from specific repos
+#   ./scripts/delete-releases.sh optivem/greeter-java   # single repo
+#   DRY_RUN=1 ./scripts/delete-releases.sh org/repo     # preview what would be deleted
 
 set -euo pipefail
 
-ORG="optivem"
+# Rate limit settings based on GitHub API limits:
+# - REST API: 5,000 requests/hour for authenticated users
+# - Secondary limits: max 80 content-modifying requests/minute (POST/PATCH/PUT/DELETE)
+# - Each release deletion = 2 mutating calls (delete release + delete tag)
+# - DELAY_BETWEEN_DELETES=2 gives ~30 deletions/min = 60 mutating calls/min (under 80 limit)
+# Reference: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 DELAY_BETWEEN_DELETES=2    # seconds between each delete call
 DELAY_BETWEEN_REPOS=5      # seconds between repos
 RATE_LIMIT_THRESHOLD=50    # pause when remaining calls drop below this
-PAGE_SIZE=100               # releases to fetch per page
-
-ALL_REPOS=(
-  greeter
-  greeter-dotnet
-  greeter-java
-  greeter-multi-comp
-  greeter-multi-lang
-  greeter-multi-repo
-  greeter-multi-repo-backend
-  greeter-multi-repo-frontend
-  greeter-typescript
-)
+PAGE_SIZE=100               # max releases per page (GitHub API max)
 
 DRY_RUN="${DRY_RUN:-0}"
 
-# Use repos from args, or default to all
-if [[ $# -gt 0 ]]; then
-  REPOS=("$@")
-else
-  REPOS=("${ALL_REPOS[@]}")
+if [[ $# -eq 0 ]]; then
+  echo "Usage: $0 <owner/repo> [owner/repo ...]"
+  echo "  Example: $0 optivem/greeter-java optivem/greeter-dotnet"
+  echo ""
+  echo "Environment variables:"
+  echo "  DRY_RUN=1   Preview what would be deleted without making changes"
+  exit 1
 fi
+
+REPOS=("$@")
 
 wait_for_rate_limit() {
   local remaining
@@ -56,8 +53,7 @@ wait_for_rate_limit() {
 }
 
 delete_releases_for_repo() {
-  local repo="$1"
-  local full_repo="${ORG}/${repo}"
+  local full_repo="$1"
 
   echo ""
   echo "========================================="
