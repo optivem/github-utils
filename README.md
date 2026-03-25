@@ -30,3 +30,20 @@ DRY_RUN=1 ./scripts/delete-releases.sh optivem/greeter-java
 ```
 
 The `owner` can be a GitHub organization or a personal user account.
+
+### delete-packages.sh
+
+Bulk deletes GitHub packages from one or more orgs/users. Handles the GitHub requirement of making public packages private before deletion. Automatically detects whether the owner is an org or user account.
+
+**Usage:**
+
+```bash
+# Delete all packages for an org
+./scripts/delete-packages.sh optivem
+
+# Preview what would be deleted (no changes made)
+DRY_RUN=1 ./scripts/delete-packages.sh optivem
+
+# Multiple owners
+./scripts/delete-packages.sh optivem my-github-username
+```
