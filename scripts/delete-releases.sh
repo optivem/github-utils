@@ -20,7 +20,6 @@ DELAY_BETWEEN_DELETES=2    # seconds between each delete call
 DELAY_BETWEEN_REPOS=5      # seconds between repos
 RATE_LIMIT_THRESHOLD=50    # pause when remaining calls drop below this
 PAGE_SIZE=100               # max releases per page (GitHub API max)
-
 DRY_RUN="${DRY_RUN:-0}"
 
 if [[ $# -eq 0 ]]; then
@@ -52,6 +51,33 @@ wait_for_rate_limit() {
   fi
 }
 
+# Wrapper around gh api that stops the script on rate limit errors (403/429).
+# Continuing to make requests while rate limited can result in a ban.
+# Reference: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+gh_api_or_stop() {
+  GH_API_OUTPUT=$(gh api "$@" 2>&1)
+  local exit_code=$?
+
+  if [[ "$exit_code" -ne 0 ]]; then
+    if echo "$GH_API_OUTPUT" | grep -qiE "rate limit|abuse detection|API rate limit exceeded"; then
+      local reset_ts
+      reset_ts=$(gh api rate_limit --jq '.resources.core.reset' 2>/dev/null || echo "0")
+      local reset_time="unknown"
+      if [[ "$reset_ts" -gt 0 ]]; then
+        reset_time=$(date -d "@$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || date -r "$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || echo "unknown")
+      fi
+      echo ""
+      echo "============================================"
+      echo "  STOPPED: GitHub API rate limit exceeded."
+      echo "  You can re-run this script after: $reset_time"
+      echo "============================================"
+      exit 1
+    fi
+    return 1
+  fi
+  return 0
+}
+
 delete_releases_for_repo() {
   local full_repo="$1"
 
@@ -67,12 +93,12 @@ delete_releases_for_repo() {
   while true; do
     wait_for_rate_limit
 
-    local releases
-    releases=$(gh api "repos/${full_repo}/releases?per_page=${PAGE_SIZE}&page=${page}" \
-      --jq '.[] | "\(.id)\t\(.tag_name)\t\(.name)"' 2>&1) || {
-      echo "  ⚠️  Failed to list releases for $full_repo: $releases"
+    if ! gh_api_or_stop "repos/${full_repo}/releases?per_page=${PAGE_SIZE}&page=${page}" \
+      --jq '.[] | "\(.id)\t\(.tag_name)\t\(.name)"'; then
+      echo "  ⚠️  Failed to list releases for $full_repo: $GH_API_OUTPUT"
       return 1
-    }
+    fi
+    local releases="$GH_API_OUTPUT"
 
     if [[ -z "$releases" ]]; then
       if [[ "$page" -eq 1 ]]; then
@@ -89,13 +115,13 @@ delete_releases_for_repo() {
 
         # Delete the release
         wait_for_rate_limit
-        gh api -X DELETE "repos/${full_repo}/releases/${release_id}" 2>/dev/null && \
+        gh_api_or_stop -X DELETE "repos/${full_repo}/releases/${release_id}" && \
           echo "    ✓ Release deleted" || \
           echo "    ✗ Failed to delete release"
 
         # Delete the associated git tag
         wait_for_rate_limit
-        gh api -X DELETE "repos/${full_repo}/git/refs/tags/${tag_name}" 2>/dev/null && \
+        gh_api_or_stop -X DELETE "repos/${full_repo}/git/refs/tags/${tag_name}" && \
           echo "    ✓ Tag deleted" || \
           echo "    ✗ Tag not found or already deleted"
 
