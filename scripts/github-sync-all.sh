@@ -9,7 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACADEMY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WORKSPACE_FILE="$ACADEMY_ROOT/academy-workspace.code-workspace"
+WORKSPACE_FILE="$ACADEMY_ROOT/academy.code-workspace"
 
 if [[ ! -f "$WORKSPACE_FILE" ]]; then
   echo "Error: workspace file not found at $WORKSPACE_FILE"
