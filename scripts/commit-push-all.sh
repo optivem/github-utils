@@ -13,11 +13,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACADEMY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WORKSPACE_FILE="$ACADEMY_ROOT/academy-workspace.code-workspace"
+WORKSPACE_FILE="$(ls "$ACADEMY_ROOT"/*.code-workspace 2>/dev/null | head -1)"
 COMMIT_MSG="${1:-"Sync changes"}"
 
-if [[ ! -f "$WORKSPACE_FILE" ]]; then
-  echo "Error: workspace file not found at $WORKSPACE_FILE"
+if [[ -z "$WORKSPACE_FILE" || ! -f "$WORKSPACE_FILE" ]]; then
+  echo "Error: no .code-workspace file found in $ACADEMY_ROOT"
   exit 1
 fi
 
