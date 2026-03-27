@@ -16,6 +16,8 @@
 
 set -euo pipefail
 
+trap 'echo ""; echo "  ❌ Unexpected error on line $LINENO (exit code $?)" >&2' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
