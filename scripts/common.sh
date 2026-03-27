@@ -39,26 +39,28 @@ wait_for_rate_limit() {
 # For rate limit errors, prints when the limit resets.
 # Reference: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 gh_api_or_stop() {
-  GH_API_OUTPUT=$(gh api "$@" 2>&1)
-  local exit_code=$?
+  local exit_code=0
+  GH_API_OUTPUT=$(gh api "$@" 2>&1) || exit_code=$?
 
   if [[ "$exit_code" -ne 0 ]]; then
-    echo ""
-    echo "============================================"
-    if echo "$GH_API_OUTPUT" | grep -qiE "rate limit|abuse detection|API rate limit exceeded"; then
-      local reset_ts
-      reset_ts=$(gh api rate_limit --jq '.resources.core.reset' 2>/dev/null || echo "0")
-      local reset_time="unknown"
-      if [[ "$reset_ts" -gt 0 ]]; then
-        reset_time=$(date -d "@$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || date -r "$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || echo "unknown")
+    {
+      echo ""
+      echo "============================================"
+      if echo "$GH_API_OUTPUT" | grep -qiE "rate limit|abuse detection|API rate limit exceeded"; then
+        local reset_ts
+        reset_ts=$(gh api rate_limit --jq '.resources.core.reset' 2>/dev/null || echo "0")
+        local reset_time="unknown"
+        if [[ "$reset_ts" -gt 0 ]]; then
+          reset_time=$(date -d "@$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || date -r "$reset_ts" '+%H:%M:%S %Z' 2>/dev/null || echo "unknown")
+        fi
+        echo "  STOPPED: GitHub API rate limit exceeded."
+        echo "  You can re-run this script after: $reset_time"
+      else
+        echo "  STOPPED: GitHub API error."
+        echo "  $(echo "$GH_API_OUTPUT" | tr -d '\r')"
       fi
-      echo "  STOPPED: GitHub API rate limit exceeded."
-      echo "  You can re-run this script after: $reset_time"
-    else
-      echo "  STOPPED: GitHub API error."
-      echo "  $GH_API_OUTPUT"
-    fi
-    echo "============================================"
+      echo "============================================"
+    } >&2
     exit 1
   fi
   return 0
