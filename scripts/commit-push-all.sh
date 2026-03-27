@@ -21,9 +21,10 @@ if [[ ! -f "$WORKSPACE_FILE" ]]; then
   exit 1
 fi
 
-# Extract folder paths from workspace JSON
-mapfile -t FOLDERS < <(node -e "
-  const ws = JSON.parse(require('fs').readFileSync('$WORKSPACE_FILE', 'utf-8'));
+# Extract folder paths from workspace JSON (pass path via env var to avoid quoting issues)
+WORKSPACE_FILE_WIN="$(cygpath -w "$WORKSPACE_FILE" 2>/dev/null || echo "$WORKSPACE_FILE")"
+mapfile -t FOLDERS < <(WS_FILE="$WORKSPACE_FILE_WIN" node -e "
+  const ws = JSON.parse(require('fs').readFileSync(process.env.WS_FILE, 'utf-8'));
   ws.folders.forEach(f => console.log(f.path || f.name));
 ")
 
