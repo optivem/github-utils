@@ -47,7 +47,7 @@ for folder in "${FOLDERS[@]}"; do
   echo ""
   echo "--- $folder ---"
 
-  git -C "$repo" pull --rebase
+  git -C "$repo" pull
   ((pulled++)) || true
 
   git -C "$repo" push
