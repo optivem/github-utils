@@ -72,3 +72,6 @@ echo ""
 echo "============================================"
 echo "  Done. $committed committed, $pushed pushed, $skipped already clean."
 echo "============================================"
+
+exit
+}
