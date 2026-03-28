@@ -28,6 +28,9 @@ mapfile -t FOLDERS < <(WS_FILE="$WORKSPACE_FILE_WIN" node -e "
   ws.folders.forEach(f => console.log(f.path || f.name));
 ")
 
+# Ensure git uses gh for credentials (avoids Windows Credential Manager popups)
+gh auth setup-git
+
 committed=0
 pushed=0
 skipped=0
