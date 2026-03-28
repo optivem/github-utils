@@ -63,3 +63,6 @@ echo ""
 echo "============================================"
 echo "  Done. $pulled pulled, $pushed pushed, $skipped skipped (no remote)."
 echo "============================================"
+
+exit
+}
