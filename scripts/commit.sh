@@ -1,13 +1,13 @@
 #!/bin/bash
-# commit-push-all.sh
-# Commits and pushes all dirty repos in the academy workspace.
+# commit.sh
+# Commits, pulls, and pushes all repos in the academy workspace.
 #
 # Usage:
-#   ./scripts/commit-push-all.sh [commit message]
+#   ./scripts/commit.sh [commit message]
 #
 # Examples:
-#   ./scripts/commit-push-all.sh
-#   ./scripts/commit-push-all.sh "Update settings"
+#   ./scripts/commit.sh
+#   ./scripts/commit.sh "Update settings"
 
 set -euo pipefail
 
@@ -32,11 +32,11 @@ mapfile -t FOLDERS < <(WS_FILE="$WORKSPACE_FILE_WIN" node -e "
 gh auth setup-git
 
 committed=0
-pushed=0
+synced=0
 skipped=0
 
 echo "============================================"
-echo "  Commit & Push All Repos"
+echo "  Commit All Repos"
 echo "  Message: $COMMIT_MSG"
 echo "============================================"
 
@@ -47,31 +47,34 @@ for folder in "${FOLDERS[@]}"; do
     continue
   fi
 
-  status=$(git -C "$repo" status --short)
-
-  if [[ -z "$status" ]]; then
+  # Skip repos with no remote tracking branch
+  if ! git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{u}' &>/dev/null; then
     ((skipped++)) || true
     continue
   fi
 
   echo ""
   echo "--- $folder ---"
-  echo "$status"
 
-  git -C "$repo" add -A
-  git -C "$repo" commit -m "$COMMIT_MSG
+  status=$(git -C "$repo" status --short)
+
+  if [[ -n "$status" ]]; then
+    echo "$status"
+    git -C "$repo" add -A
+    git -C "$repo" commit -m "$COMMIT_MSG
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+    ((committed++)) || true
+    echo "  ✓ Committed"
+  fi
+
+  git -C "$repo" pull
   git -C "$repo" push
-  ((committed++)) || true
-  ((pushed++)) || true
-  echo "  ✓ Committed and pushed"
+  ((synced++)) || true
+  echo "  ✓ Pulled and pushed"
 done
 
 echo ""
 echo "============================================"
-echo "  Done. $committed committed, $pushed pushed, $skipped already clean."
+echo "  Done. $committed committed, $synced synced, $skipped skipped (no remote)."
 echo "============================================"
-
-exit
-}
