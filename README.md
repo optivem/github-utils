@@ -42,10 +42,10 @@ Bulk deletes GitHub packages from one or more repositories. Handles the GitHub r
 ./scripts/delete-packages.sh owner/repo1 owner/repo2
 
 # Single repo
-./scripts/delete-packages.sh optivem/eshop
+./scripts/delete-packages.sh optivem/starter
 
 # Preview what would be deleted (no changes made)
-DRY_RUN=1 ./scripts/delete-packages.sh optivem/eshop
+DRY_RUN=1 ./scripts/delete-packages.sh optivem/starter
 ```
 
 The `owner` can be a GitHub organization or a personal user account.
