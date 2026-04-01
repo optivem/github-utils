@@ -1,29 +1,22 @@
 #!/bin/bash
-# commit.sh
-# Commits, pulls, and pushes all repos in the academy workspace.
+# sync.sh
+# Pulls and pushes all repos in the academy workspace (no commit).
 #
 # Usage:
-#   ./scripts/commit.sh [commit message]
-#
-# Examples:
-#   ./scripts/commit.sh
-#   ./scripts/commit.sh "Update settings"
+#   ./scripts/sync.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-COMMIT_MSG="${1:-"Sync changes"}"
 load_workspace_folders
 
-committed=0
 synced=0
 skipped=0
 
 echo "============================================"
-echo "  Commit All Repos"
-echo "  Message: $COMMIT_MSG"
+echo "  Sync All Repos"
 echo "============================================"
 
 for folder in "${FOLDERS[@]}"; do
@@ -42,18 +35,6 @@ for folder in "${FOLDERS[@]}"; do
   echo ""
   echo "--- $folder ---"
 
-  status=$(git -C "$repo" status --short)
-
-  if [[ -n "$status" ]]; then
-    echo "$status"
-    git -C "$repo" add -A
-    git -C "$repo" commit -m "$COMMIT_MSG
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-    ((committed++)) || true
-    echo "  ✓ Committed"
-  fi
-
   git -C "$repo" pull
   git -C "$repo" push
   ((synced++)) || true
@@ -62,5 +43,5 @@ done
 
 echo ""
 echo "============================================"
-echo "  Done. $committed committed, $synced synced, $skipped skipped (no remote)."
+echo "  Done. $synced synced, $skipped skipped (no remote)."
 echo "============================================"

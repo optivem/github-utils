@@ -17,6 +17,28 @@ RATE_LIMIT_THRESHOLD="${RATE_LIMIT_THRESHOLD:-50}"
 PAGE_SIZE="${PAGE_SIZE:-100}"
 DRY_RUN="${DRY_RUN:-0}"
 
+load_workspace_folders() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  ACADEMY_ROOT="$(cd "$script_dir/../.." && pwd)"
+  local workspace_file
+  workspace_file="$(ls "$ACADEMY_ROOT"/*.code-workspace 2>/dev/null | head -1)"
+
+  if [[ -z "$workspace_file" || ! -f "$workspace_file" ]]; then
+    echo "Error: no .code-workspace file found in $ACADEMY_ROOT"
+    exit 1
+  fi
+
+  local workspace_file_win
+  workspace_file_win="$(cygpath -w "$workspace_file" 2>/dev/null || echo "$workspace_file")"
+  mapfile -t FOLDERS < <(WS_FILE="$workspace_file_win" node -e "
+    const ws = JSON.parse(require('fs').readFileSync(process.env.WS_FILE, 'utf-8'));
+    ws.folders.forEach(f => console.log(f.path || f.name));
+  ")
+
+  gh auth setup-git
+}
+
 wait_for_rate_limit() {
   local remaining
   remaining=$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo "0")
