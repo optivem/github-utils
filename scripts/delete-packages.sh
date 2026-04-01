@@ -10,7 +10,7 @@
 #
 # Usage:
 #   ./scripts/delete-packages.sh owner/repo1 owner/repo2   # delete packages from specific repos
-#   ./scripts/delete-packages.sh optivem/eshop       # single repo
+#   ./scripts/delete-packages.sh optivem/starter       # single repo
 #   DRY_RUN=1 ./scripts/delete-packages.sh owner/repo       # preview what would be deleted
 #
 # Reference: https://docs.github.com/en/rest/packages/packages
@@ -28,7 +28,7 @@ PACKAGE_TYPES=("npm" "maven" "docker" "nuget" "rubygems" "container")
 
 if [[ $# -eq 0 ]]; then
   echo "Usage: $0 <owner/repo> [owner/repo ...]"
-  echo "  Example: $0 optivem/eshop optivem/eshop-tests"
+  echo "  Example: $0 optivem/starter optivem/eshop-tests"
   echo ""
   echo "Environment variables:"
   echo "  DRY_RUN=1   Preview what would be deleted without making changes"
