@@ -11,8 +11,8 @@
 # - GITHUB_TOKEN in Actions: 1,000 requests/hour/repo (15,000 for Enterprise Cloud)
 # - Secondary limits: max 80 content-modifying requests/minute (POST/PATCH/PUT/DELETE)
 # Reference: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-DELAY_BETWEEN_DELETES="${DELAY_BETWEEN_DELETES:-2}"
-DELAY_BETWEEN_REPOS="${DELAY_BETWEEN_REPOS:-5}"
+DELAY_BETWEEN_DELETES="${DELAY_BETWEEN_DELETES:-10}"
+DELAY_BETWEEN_REPOS="${DELAY_BETWEEN_REPOS:-10}"
 RATE_LIMIT_THRESHOLD="${RATE_LIMIT_THRESHOLD:-50}"
 PAGE_SIZE="${PAGE_SIZE:-100}"
 DRY_RUN="${DRY_RUN:-0}"
