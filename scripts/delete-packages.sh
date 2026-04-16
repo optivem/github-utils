@@ -12,6 +12,8 @@
 #   ./scripts/delete-packages.sh owner/repo1 owner/repo2   # delete packages from specific repos
 #   ./scripts/delete-packages.sh optivem/starter       # single repo
 #   DRY_RUN=1 ./scripts/delete-packages.sh owner/repo       # preview what would be deleted
+#   BEFORE_DATE=2026-01-01 ./scripts/delete-packages.sh owner/repo  # only delete packages created before this date (exclusive)
+#   DELAY=30 ./scripts/delete-packages.sh owner/repo                # wait 30s between deletions (default: 10)
 #
 # Reference: https://docs.github.com/en/rest/packages/packages
 
@@ -31,8 +33,22 @@ if [[ $# -eq 0 ]]; then
   echo "  Example: $0 optivem/starter optivem/eshop-tests"
   echo ""
   echo "Environment variables:"
-  echo "  DRY_RUN=1   Preview what would be deleted without making changes"
+  echo "  DRY_RUN=1              Preview what would be deleted without making changes"
+  echo "  BEFORE_DATE=YYYY-MM-DD Only delete packages created before this date (exclusive)"
+  echo "  DELAY=N                Seconds to wait between deletions (default: 10)"
   exit 1
+fi
+
+BEFORE_DATE="${BEFORE_DATE:-}"
+if [[ -n "${DELAY:-}" ]]; then
+  DELAY_BETWEEN_DELETES="$DELAY"
+fi
+
+if [[ -n "$BEFORE_DATE" ]]; then
+  BEFORE_DATE_EPOCH=$(date -d "$BEFORE_DATE" +%s 2>/dev/null || date -jf "%Y-%m-%d" "$BEFORE_DATE" +%s 2>/dev/null) || {
+    echo "Error: invalid BEFORE_DATE format '$BEFORE_DATE'. Use YYYY-MM-DD."
+    exit 1
+  }
 fi
 
 REPOS=("$@")
@@ -83,7 +99,7 @@ delete_packages_for_repo() {
       # List packages of this type, filter by repository name
       local packages
       packages=$(gh api "${owner_type}/${owner}/packages?package_type=${package_type}&per_page=${PAGE_SIZE}&page=${page}" \
-        --jq ".[] | select(.repository.name == \"${repo_name}\") | \"\(.name)\t\(.package_type)\t\(.visibility)\"" 2>&1) || {
+        --jq ".[] | select(.repository.name == \"${repo_name}\") | \"\(.name)\t\(.package_type)\t\(.visibility)\t\(.created_at)\"" 2>&1) || {
         # No packages of this type — skip
         break
       }
@@ -92,11 +108,20 @@ delete_packages_for_repo() {
         break
       fi
 
-      while IFS=$'\t' read -r package_name pkg_type visibility; do
+      while IFS=$'\t' read -r package_name pkg_type visibility created_at; do
         local encoded_name
         encoded_name=$(url_encode_package "$package_name")
         echo ""
-        echo "    Package: $package_name (type: $pkg_type, visibility: $visibility)"
+        echo "    Package: $package_name (type: $pkg_type, visibility: $visibility, created: $created_at)"
+
+        if [[ -n "$BEFORE_DATE" ]]; then
+          local package_epoch
+          package_epoch=$(date -d "$created_at" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%SZ" "$created_at" +%s 2>/dev/null || echo "0")
+          if [[ "$package_epoch" -ge "$BEFORE_DATE_EPOCH" ]]; then
+            echo "    Skipping: on or after $BEFORE_DATE"
+            continue
+          fi
+        fi
 
         # Public packages with many downloads can't be deleted via API.
         # They must be made private first via the GitHub UI:
@@ -138,6 +163,9 @@ delete_packages_for_repo() {
 echo "============================================"
 echo "  GitHub Package Cleanup Script"
 echo "  Repos: ${REPOS[*]}"
+if [[ -n "$BEFORE_DATE" ]]; then
+  echo "  Filter: packages created before $BEFORE_DATE (exclusive)"
+fi
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "  Mode: DRY RUN (no changes will be made)"
 fi
