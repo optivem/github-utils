@@ -10,7 +10,7 @@
 #
 # Usage:
 #   ./scripts/delete-packages.sh owner/repo1 owner/repo2   # delete packages from specific repos
-#   ./scripts/delete-packages.sh optivem/starter       # single repo
+#   ./scripts/delete-packages.sh optivem/shop       # single repo
 #   DRY_RUN=1 ./scripts/delete-packages.sh owner/repo       # preview what would be deleted
 #   BEFORE_DATE=2026-01-01 ./scripts/delete-packages.sh owner/repo  # only delete packages created before this date (exclusive)
 #   DELAY=30 ./scripts/delete-packages.sh owner/repo                # wait 30s between deletions (default: 10)
@@ -30,7 +30,7 @@ PACKAGE_TYPES=("npm" "maven" "docker" "nuget" "rubygems" "container")
 
 if [[ $# -eq 0 ]]; then
   echo "Usage: $0 <owner/repo> [owner/repo ...]"
-  echo "  Example: $0 optivem/starter optivem/eshop-tests"
+  echo "  Example: $0 optivem/shop optivem/eshop-tests"
   echo ""
   echo "Environment variables:"
   echo "  DRY_RUN=1              Preview what would be deleted without making changes"
