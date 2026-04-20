@@ -52,6 +52,7 @@ for folder in "${FOLDERS[@]}"; do
   repo_failing=0
   repo_in_progress=0
   repo_failures=()
+  repo_nwo=$(cd "$repo" && gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null) || repo_nwo=""
 
   while IFS=$'\t' read -r wf_name wf_state wf_id; do
     [[ -z "$wf_name" ]] && continue
@@ -73,7 +74,13 @@ for folder in "${FOLDERS[@]}"; do
         error_snippet="  (no error details available)"
       fi
 
-      repo_failures+=("$workflow|$title|$run_id|$error_snippet")
+      if [[ -n "$repo_nwo" ]]; then
+        run_url="https://github.com/$repo_nwo/actions/runs/$run_id"
+      else
+        run_url=""
+      fi
+
+      repo_failures+=("$workflow|$title|$run_id|$run_url|$error_snippet")
     else
       ((repo_passing++)) || true
     fi
@@ -87,8 +94,8 @@ for folder in "${FOLDERS[@]}"; do
     [[ $repo_in_progress -gt 0 ]] && status_parts+=("$repo_in_progress in progress")
     echo "  ❌ $folder — $(IFS=', '; echo "${status_parts[*]}")"
     for entry in "${repo_failures[@]}"; do
-      IFS='|' read -r workflow title run_id error_snippet <<< "$entry"
-      failed_details+=("$folder|$workflow|$title|$run_id|$error_snippet")
+      IFS='|' read -r workflow title run_id run_url error_snippet <<< "$entry"
+      failed_details+=("$folder|$workflow|$title|$run_id|$run_url|$error_snippet")
     done
   else
     ((total_passing++)) || true
@@ -109,10 +116,11 @@ if [[ ${#failed_details[@]} -gt 0 ]]; then
   echo ""
   echo "Failure details:"
   for entry in "${failed_details[@]}"; do
-    IFS='|' read -r repo workflow title run_id error_snippet <<< "$entry"
+    IFS='|' read -r repo workflow title run_id run_url error_snippet <<< "$entry"
     echo ""
     echo "  ❌ $repo / $workflow"
     echo "     Commit: $title"
+    [[ -n "$run_url" ]] && echo "     Run:    $run_url"
     echo "     Errors:"
     echo "$error_snippet"
   done
