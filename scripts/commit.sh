@@ -17,14 +17,49 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
+show_usage() {
+  cat <<'EOF'
+Usage: commit.sh [--repo <name>] [commit message]
+
+Commits, pulls, and pushes repos in the academy workspace.
+
+Options:
+  --repo <name>    Only operate on the named repo
+  -h, --help       Show this help
+
+Examples:
+  commit.sh
+  commit.sh "Update settings"
+  commit.sh --repo shop
+  commit.sh --repo shop "Fix bug"
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  show_usage
+  exit 0
+fi
+
 SINGLE_REPO=""
 if [[ "${1:-}" == "--repo" ]]; then
   SINGLE_REPO="${2:-}"
   if [[ -z "$SINGLE_REPO" ]]; then
-    echo "Error: --repo requires a repo name"
+    echo "Error: --repo requires a repo name" >&2
+    show_usage >&2
     exit 1
   fi
   shift 2
+fi
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  show_usage
+  exit 0
+fi
+
+if [[ "${1:-}" == --* ]]; then
+  echo "Error: unknown flag '$1'" >&2
+  show_usage >&2
+  exit 1
 fi
 
 COMMIT_MSG="${1:-"Sync changes"}"
