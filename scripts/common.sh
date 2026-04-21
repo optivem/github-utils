@@ -5,6 +5,13 @@
 # Source this file from other scripts:
 #   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   source "$SCRIPT_DIR/common.sh"
+#
+# This file transitively sources gh-retry.sh — callers get `gh_retry` for
+# transient-error-safe `gh` invocations. Raw `gh api rate_limit` is used by
+# wait_for_rate_limit itself and must NOT be routed through gh_retry.
+
+_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_COMMON_DIR/gh-retry.sh"
 
 # Rate limit settings based on GitHub API limits:
 # - Personal access token: 5,000 requests/hour
@@ -62,7 +69,7 @@ wait_for_rate_limit() {
 # Reference: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 gh_api_or_stop() {
   local exit_code=0
-  GH_API_OUTPUT=$(gh api "$@" 2>&1) || exit_code=$?
+  GH_API_OUTPUT=$(gh_retry api "$@" 2>&1) || exit_code=$?
 
   if [[ "$exit_code" -ne 0 ]]; then
     {

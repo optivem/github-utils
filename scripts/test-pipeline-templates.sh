@@ -61,7 +61,8 @@ push_dummy_commit() {
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   content=$(printf 'pipeline-test %s\n' "$timestamp" | base64 | tr -d '\n')
 
-  existing_sha=$(gh api "repos/${full_repo}/contents/${path}" --jq '.sha' 2>/dev/null || true)
+  wait_for_rate_limit
+  existing_sha=$(gh_retry api "repos/${full_repo}/contents/${path}" --jq '.sha' 2>/dev/null || true)
 
   if [[ -n "$existing_sha" ]]; then
     input_json=$(printf '{"message":"test: trigger pipeline template test","content":"%s","sha":"%s"}' \
@@ -71,7 +72,7 @@ push_dummy_commit() {
   fi
 
   wait_for_rate_limit
-  echo "$input_json" | gh api "repos/${full_repo}/contents/${path}" -X PUT --input - --jq '.commit.sha'
+  echo "$input_json" | gh_retry api "repos/${full_repo}/contents/${path}" -X PUT --input - --jq '.commit.sha'
 }
 
 # Find the run ID for the workflow triggered by a specific commit SHA.
@@ -83,7 +84,8 @@ find_run_for_commit() {
 
   while [[ -z "$run_id" && "$attempts" -lt "$max_attempts" ]]; do
     sleep 5
-    run_id=$(gh run list --repo "$full_repo" --workflow "$workflow" --limit 5 \
+    wait_for_rate_limit
+    run_id=$(gh_retry run list --repo "$full_repo" --workflow "$workflow" --limit 5 \
       --json databaseId,headSha \
       --jq ".[] | select(.headSha == \"$commit_sha\") | .databaseId" \
       2>/dev/null | head -1 || true)
@@ -103,7 +105,9 @@ wait_for_run() {
   local full_repo="${OWNER}/${repo}"
 
   log "Waiting for ${label} in ${repo} (run ${run_id})..."
-  if ! gh run watch "$run_id" --repo "$full_repo" --exit-status 2>/dev/null; then
+  wait_for_rate_limit
+  # gh_retry buffers output — fine here because stderr is already suppressed.
+  if ! gh_retry run watch "$run_id" --repo "$full_repo" --exit-status 2>/dev/null; then
     echo "FAILED: ${label} in ${repo} (run ${run_id})" >&2
     echo "  View: https://github.com/${full_repo}/actions/runs/${run_id}" >&2
     return 1
@@ -119,10 +123,11 @@ trigger_workflow() {
   local full_repo="${OWNER}/${repo}"
 
   wait_for_rate_limit
-  gh workflow run "$workflow" --repo "$full_repo" "$@"
+  gh_retry workflow run "$workflow" --repo "$full_repo" "$@"
   sleep 10
 
-  gh run list --repo "$full_repo" --workflow "$workflow" --limit 1 \
+  wait_for_rate_limit
+  gh_retry run list --repo "$full_repo" --workflow "$workflow" --limit 1 \
     --json databaseId --jq '.[0].databaseId'
 }
 
@@ -141,19 +146,22 @@ run_acceptance_stage() {
     run_id=$(trigger_workflow "$repo" "acceptance-stage.yml")
     log "[${repo}] Acceptance stage run: ${run_id}"
 
-    if ! gh run watch "$run_id" --repo "$full_repo" --exit-status 2>/dev/null; then
+    wait_for_rate_limit
+    if ! gh_retry run watch "$run_id" --repo "$full_repo" --exit-status 2>/dev/null; then
       echo "FAILED: acceptance-stage in ${repo} (run ${run_id})" >&2
       echo "  View: https://github.com/${full_repo}/actions/runs/${run_id}" >&2
       return 1
     fi
 
+    wait_for_rate_limit
     local run_job_conclusion
-    run_job_conclusion=$(gh run view "$run_id" --repo "$full_repo" --json jobs \
+    run_job_conclusion=$(gh_retry run view "$run_id" --repo "$full_repo" --json jobs \
       --jq '.jobs[] | select(.name == "run") | .conclusion' 2>/dev/null || echo "")
 
     if [[ "$run_job_conclusion" == "success" ]]; then
+      wait_for_rate_limit
       local version
-      version=$(gh release list --repo "$full_repo" --json tagName,isPrerelease,createdAt \
+      version=$(gh_retry release list --repo "$full_repo" --json tagName,isPrerelease,createdAt \
         --jq "[.[] | select(.isPrerelease and .createdAt > \"${before}\")] | .[0].tagName" \
         2>/dev/null || echo "")
 

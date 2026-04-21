@@ -58,7 +58,7 @@ REPOS=("$@")
 get_owner_type() {
   local owner="$1"
   local user_type
-  user_type=$(gh api "users/${owner}" --jq '.type' 2>/dev/null || echo "")
+  user_type=$(gh_retry api "users/${owner}" --jq '.type' 2>/dev/null || echo "")
 
   if [[ "$user_type" == "Organization" ]]; then
     echo "orgs"
@@ -98,7 +98,7 @@ delete_packages_for_repo() {
 
       # List packages of this type, filter by repository name
       local packages
-      packages=$(gh api "${owner_type}/${owner}/packages?package_type=${package_type}&per_page=${PAGE_SIZE}&page=${page}" \
+      packages=$(gh_retry api "${owner_type}/${owner}/packages?package_type=${package_type}&per_page=${PAGE_SIZE}&page=${page}" \
         --jq ".[] | select(.repository.name == \"${repo_name}\") | \"\(.name)\t\(.package_type)\t\(.visibility)\t\(.created_at)\"" 2>&1) || {
         # No packages of this type — skip
         break

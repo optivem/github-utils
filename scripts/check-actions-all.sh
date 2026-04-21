@@ -9,6 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
 ACADEMY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKSPACE_FILE="$(ls "$ACADEMY_ROOT"/*.code-workspace 2>/dev/null | head -1)"
 
@@ -39,8 +40,10 @@ for folder in "${FOLDERS[@]}"; do
     continue
   fi
 
+  wait_for_rate_limit
+
   # Get all workflow files to discover workflow names
-  workflows=$(cd "$repo" && gh workflow list --all 2>&1) || true
+  workflows=$(cd "$repo" && gh_retry workflow list --all 2>&1) || true
 
   if [[ -z "$workflows" ]]; then
     ((no_workflows++)) || true
@@ -52,13 +55,13 @@ for folder in "${FOLDERS[@]}"; do
   repo_failing=0
   repo_in_progress=0
   repo_failures=()
-  repo_nwo=$(cd "$repo" && gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null) || repo_nwo=""
+  repo_nwo=$(cd "$repo" && gh_retry repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null) || repo_nwo=""
 
   while IFS=$'\t' read -r wf_name wf_state wf_id; do
     [[ -z "$wf_name" ]] && continue
 
     # Get only the latest run for this specific workflow
-    latest_run=$(cd "$repo" && gh run list --workflow "$wf_id" --limit 1 2>&1) || true
+    latest_run=$(cd "$repo" && gh_retry run list --workflow "$wf_id" --limit 1 2>&1) || true
     [[ -z "$latest_run" ]] && continue
 
     IFS=$'\t' read -r _status conclusion title workflow branch trigger run_id duration date <<< "$latest_run"
@@ -69,7 +72,7 @@ for folder in "${FOLDERS[@]}"; do
       ((repo_failing++)) || true
 
       # Get the failed step error (last 5 lines of failed log)
-      error_snippet=$(cd "$repo" && gh run view "$run_id" --log-failed 2>&1 | grep "##\[error\]" | tail -3 | sed 's/.*##\[error\]/  /' ) || true
+      error_snippet=$(cd "$repo" && gh_retry run view "$run_id" --log-failed 2>&1 | grep "##\[error\]" | tail -3 | sed 's/.*##\[error\]/  /' ) || true
       if [[ -z "$error_snippet" ]]; then
         error_snippet="  (no error details available)"
       fi
