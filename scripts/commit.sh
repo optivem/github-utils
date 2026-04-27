@@ -5,12 +5,14 @@
 # Usage:
 #   ./scripts/commit.sh [commit message]
 #   ./scripts/commit.sh --repo <repo-name> [commit message]
+#   ./scripts/commit.sh --repo <repo-name> --paths "<paths>" [commit message]
 #
 # Examples:
-#   ./scripts/commit.sh                           # all repos, default message
-#   ./scripts/commit.sh "Update settings"         # all repos, custom message
-#   ./scripts/commit.sh --repo eshop-tests        # single repo, default message
-#   ./scripts/commit.sh --repo eshop-tests "Fix"  # single repo, custom message
+#   ./scripts/commit.sh                                       # all repos, default message
+#   ./scripts/commit.sh "Update settings"                     # all repos, custom message
+#   ./scripts/commit.sh --repo eshop-tests                    # single repo, default message
+#   ./scripts/commit.sh --repo eshop-tests "Fix"              # single repo, custom message
+#   ./scripts/commit.sh --repo shop --paths "src/foo src/bar" "Fix"   # commit only those paths
 
 set -euo pipefail
 
@@ -19,45 +21,62 @@ source "$SCRIPT_DIR/common.sh"
 
 show_usage() {
   cat <<'EOF'
-Usage: commit.sh [--repo <name>] [commit message]
+Usage: commit.sh [--repo <name>] [--paths "<paths>"] [commit message]
 
 Commits, pulls, and pushes repos in the academy workspace.
 
 Options:
-  --repo <name>    Only operate on the named repo
-  -h, --help       Show this help
+  --repo <name>      Only operate on the named repo
+  --paths "<paths>"  Stage only these space-separated paths (relative to repo root)
+                     instead of `git add -A`. Useful for committing one logical
+                     scope at a time. Requires --repo.
+  -h, --help         Show this help
 
 Examples:
   commit.sh
   commit.sh "Update settings"
   commit.sh --repo shop
   commit.sh --repo shop "Fix bug"
+  commit.sh --repo shop --paths "system/monolith/java" "fix(monolith-java): resolve sonar issues"
 EOF
 }
 
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  show_usage
-  exit 0
-fi
-
 SINGLE_REPO=""
-if [[ "${1:-}" == "--repo" ]]; then
-  SINGLE_REPO="${2:-}"
-  if [[ -z "$SINGLE_REPO" ]]; then
-    echo "Error: --repo requires a repo name" >&2
-    show_usage >&2
-    exit 1
-  fi
-  shift 2
-fi
+PATHS=""
+while [[ $# -gt 0 && "$1" == --* ]]; do
+  case "$1" in
+    --help|-h)
+      show_usage
+      exit 0
+      ;;
+    --repo)
+      SINGLE_REPO="${2:-}"
+      if [[ -z "$SINGLE_REPO" ]]; then
+        echo "Error: --repo requires a repo name" >&2
+        show_usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --paths)
+      PATHS="${2:-}"
+      if [[ -z "$PATHS" ]]; then
+        echo "Error: --paths requires a path or list of paths" >&2
+        show_usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    *)
+      echo "Error: unknown flag '$1'" >&2
+      show_usage >&2
+      exit 1
+      ;;
+  esac
+done
 
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  show_usage
-  exit 0
-fi
-
-if [[ "${1:-}" == --* ]]; then
-  echo "Error: unknown flag '$1'" >&2
+if [[ -n "$PATHS" && -z "$SINGLE_REPO" ]]; then
+  echo "Error: --paths requires --repo (path semantics are repo-scoped)" >&2
   show_usage >&2
   exit 1
 fi
@@ -72,6 +91,9 @@ skipped=0
 if [[ -n "$SINGLE_REPO" ]]; then
   echo "============================================"
   echo "  Commit Repo: $SINGLE_REPO"
+  if [[ -n "$PATHS" ]]; then
+    echo "  Paths: $PATHS"
+  fi
   echo "  Message: $COMMIT_MSG"
   echo "============================================"
 else
@@ -105,16 +127,33 @@ for folder in "${FOLDERS[@]}"; do
   echo ""
   echo "--- $folder ---"
 
-  status=$(git -C "$repo" status --short)
-
-  if [[ -n "$status" ]]; then
-    echo "$status"
-    git -C "$repo" add -A
-    git -C "$repo" commit -m "$COMMIT_MSG
+  if [[ -n "$PATHS" ]]; then
+    # Stage only the specified paths
+    # shellcheck disable=SC2086
+    git -C "$repo" add -- $PATHS
+    # Check if anything was actually staged
+    if git -C "$repo" diff --cached --quiet; then
+      echo "  (no staged changes under: $PATHS)"
+    else
+      git -C "$repo" diff --cached --name-only | sed 's/^/  /'
+      git -C "$repo" commit -m "$COMMIT_MSG
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-    ((committed++)) || true
-    echo "  ✓ Committed"
+      ((committed++)) || true
+      echo "  ✓ Committed"
+    fi
+  else
+    status=$(git -C "$repo" status --short)
+
+    if [[ -n "$status" ]]; then
+      echo "$status"
+      git -C "$repo" add -A
+      git -C "$repo" commit -m "$COMMIT_MSG
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+      ((committed++)) || true
+      echo "  ✓ Committed"
+    fi
   fi
 
   git -C "$repo" pull
