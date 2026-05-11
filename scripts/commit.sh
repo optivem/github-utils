@@ -13,11 +13,19 @@
 # for y/N confirmation from /dev/tty before staging. Pass --yes for
 # unattended invocations.
 #
+# `--yes` refuses to stage untracked files unless `--include-untracked` is
+# also passed. Background: a Claude harness once dropped a stray log file
+# at the repo root, `commit.sh --yes` ran `git add -A`, and the junk landed
+# on origin/main before anyone reviewed it. Interactive callers see the
+# `??` line in the status output and decline at the y/N prompt; scripted
+# callers have no such review point, so untracked files are an opt-in.
+#
 # Examples:
 #   ./scripts/commit.sh "Update settings"                     # all repos, interactive
 #   ./scripts/commit.sh --repo eshop-tests "Fix"              # single repo, interactive
 #   ./scripts/commit.sh --repo shop --paths "src/foo" "Fix"   # commit only those paths
 #   ./scripts/commit.sh --yes "Sync .claude settings"         # scripted, no prompt
+#   ./scripts/commit.sh --yes --include-untracked "Add file"  # scripted + new files OK
 
 set -euo pipefail
 
@@ -26,18 +34,23 @@ source "$SCRIPT_DIR/common.sh"
 
 show_usage() {
   cat <<'EOF'
-Usage: commit.sh [--repo <name>] [--paths "<paths>"] [--yes] "<commit message>"
+Usage: commit.sh [--repo <name>] [--paths "<paths>"] [--yes] [--include-untracked] "<commit message>"
 
 Commits, pulls, and pushes repos in the academy workspace.
 
 Options:
-  --repo <name>      Only operate on the named repo
-  --paths "<paths>"  Stage only these space-separated paths (relative to repo root)
-                     instead of `git add -A`. Useful for committing one logical
-                     scope at a time. Requires --repo.
-  --yes              Skip the per-repo y/N confirmation prompt. Required when
-                     stdin is not a TTY (scripted invocation).
-  -h, --help         Show this help
+  --repo <name>         Only operate on the named repo
+  --paths "<paths>"     Stage only these space-separated paths (relative to repo root)
+                        instead of `git add -A`. Useful for committing one logical
+                        scope at a time. Requires --repo.
+  --yes                 Skip the per-repo y/N confirmation prompt. Required when
+                        stdin is not a TTY (scripted invocation). Refuses to stage
+                        untracked files unless --include-untracked is also passed.
+  --include-untracked   Allow `--yes` to stage untracked files (`??` entries in
+                        git status). Use when the scripted commit is intentionally
+                        adding new files. No effect outside `--yes` mode (interactive
+                        callers see and confirm the file list at the y/N prompt).
+  -h, --help            Show this help
 
 A commit message is required if any iterated repo has dirty changes.
 
@@ -46,12 +59,14 @@ Examples:
   commit.sh --repo shop "Fix bug"
   commit.sh --repo shop --paths "system/monolith/java" "fix(monolith-java): resolve sonar issues"
   commit.sh --yes "Sync .claude settings"
+  commit.sh --yes --include-untracked "Add new test file"
 EOF
 }
 
 SINGLE_REPO=""
 PATHS=""
 ASSUME_YES=0
+INCLUDE_UNTRACKED=0
 while [[ $# -gt 0 && "$1" == --* ]]; do
   case "$1" in
     --help|-h)
@@ -78,6 +93,10 @@ while [[ $# -gt 0 && "$1" == --* ]]; do
       ;;
     --yes)
       ASSUME_YES=1
+      shift
+      ;;
+    --include-untracked)
+      INCLUDE_UNTRACKED=1
       shift
       ;;
     *)
@@ -202,6 +221,19 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
     if [[ -n "$status" ]]; then
       require_commit_msg
       echo "$status"
+      # In --yes mode there's no interactive review, so we refuse to stage
+      # untracked files unless --include-untracked is explicitly passed.
+      # See the script header for the rationale (stray-file incident).
+      if [[ "$ASSUME_YES" -eq 1 && "$INCLUDE_UNTRACKED" -eq 0 ]]; then
+        untracked=$(echo "$status" | grep '^??' || true)
+        if [[ -n "$untracked" ]]; then
+          echo "Error: --yes refuses to stage untracked files. Either clean them up," >&2
+          echo "       commit them via --paths, or pass --include-untracked to opt in." >&2
+          echo "       Untracked entries:" >&2
+          echo "$untracked" | sed 's/^/         /' >&2
+          exit 1
+        fi
+      fi
       if confirm_commit "$folder"; then
         git -C "$repo" add -A
         git -C "$repo" commit -m "$COMMIT_MSG
