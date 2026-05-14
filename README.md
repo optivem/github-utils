@@ -1,51 +1,18 @@
-# GitHub Utils
+# github-utils (deprecated)
 
-A collection of utility scripts for managing GitHub repositories.
+The scripts in this directory were ported to the `gh optivem` CLI on 2026-05-14.
 
-## Prerequisites
+- `commit.sh` → `gh optivem workspace commit`
+- `sync.sh` → `gh optivem workspace sync`
+- `check-actions-all.sh` → `gh optivem workspace check-actions`
+- `check-rate-limits.sh` → `gh optivem workspace rate-limit`
+- `delete-releases.sh` → `gh optivem cleanup releases`
+- `delete-packages.sh` → `gh optivem cleanup packages`
+- `delete-repos.sh` → `gh optivem cleanup repos`
+- `delete-sonar-projects.sh` → `gh optivem cleanup sonar-projects`
 
-- [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated
-- Bash (Git Bash on Windows, or native on macOS/Linux)
+Install: `gh extension install optivem/gh-optivem`
 
-## Scripts
+## Not yet ported
 
-### delete-releases.sh
-
-Bulk deletes GitHub releases and their associated git tags from one or more repositories. Includes automatic rate limit detection — pauses and waits when API limits are low.
-
-**Usage:**
-
-```bash
-# Delete all releases from specific repos
-./scripts/delete-releases.sh owner/repo1 owner/repo2
-
-# Single repo
-./scripts/delete-releases.sh optivem/greeter-java
-
-# Preview what would be deleted (no changes made)
-DRY_RUN=1 ./scripts/delete-releases.sh optivem/greeter-java
-
-# Multiple repos
-./scripts/delete-releases.sh optivem/greeter-java optivem/greeter-dotnet optivem/greeter-typescript
-```
-
-The `owner` can be a GitHub organization or a personal user account.
-
-### delete-packages.sh
-
-Bulk deletes GitHub packages from one or more repositories. Handles the GitHub requirement of making public packages private before deletion.
-
-**Usage:**
-
-```bash
-# Delete all packages from specific repos
-./scripts/delete-packages.sh owner/repo1 owner/repo2
-
-# Single repo
-./scripts/delete-packages.sh optivem/shop
-
-# Preview what would be deleted (no changes made)
-DRY_RUN=1 ./scripts/delete-packages.sh optivem/shop
-```
-
-The `owner` can be a GitHub organization or a personal user account.
+- `scripts/test-pipeline-templates.sh` — pipeline-templates operational test (327 lines, parallel orchestration). Deferred to a dedicated session. `common.sh` and `gh-retry.sh` are kept solely as its dependencies.
