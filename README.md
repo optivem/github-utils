@@ -11,8 +11,6 @@ The scripts in this directory were ported to the `gh optivem` CLI on 2026-05-14.
 - `delete-repos.sh` → `gh optivem cleanup repos`
 - `delete-sonar-projects.sh` → `gh optivem cleanup sonar-projects`
 
+`test-pipeline-templates.sh` (and its `common.sh`/`gh-retry.sh` deps) were removed without a port — the script was unused.
+
 Install: `gh extension install optivem/gh-optivem`
-
-## Not yet ported
-
-- `scripts/test-pipeline-templates.sh` — pipeline-templates operational test (327 lines, parallel orchestration). Deferred to a dedicated session. `common.sh` and `gh-retry.sh` are kept solely as its dependencies.
