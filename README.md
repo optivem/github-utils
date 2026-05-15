@@ -2,10 +2,10 @@
 
 The scripts in this directory were ported to the `gh optivem` CLI on 2026-05-14.
 
-- `commit.sh` → `gh optivem workspace commit`
-- `sync.sh` → `gh optivem workspace sync`
-- `check-actions-all.sh` → `gh optivem workspace check-actions`
-- `check-rate-limits.sh` → `gh optivem workspace rate-limit`
+- `commit.sh` → `gh optivem commit`
+- `sync.sh` → `gh optivem sync`
+- `check-actions-all.sh` → `gh optivem actions status`
+- `check-rate-limits.sh` → `gh optivem rate-limit`
 - `delete-releases.sh` → `gh optivem cleanup releases`
 - `delete-packages.sh` → `gh optivem cleanup packages`
 - `delete-repos.sh` → `gh optivem cleanup repos`
